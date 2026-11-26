@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const String kSupabaseUrl = 'https://buygdjesrvrvziarkghq.supabase.co';
 const String kSupabaseAnonKey = 'sb_publishable_2Ub-HpGdI9swNxaTZH50ag_4NM-Pphv';
-const String kStorageBucket = 'products';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -134,17 +131,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final c = curr ?? _currency;
     final sym = c == 'USD' ? '\$' : c == 'SAR' ? 'ر.س' : 'ر.ي';
     return '${amount ?? 0} $sym';
-  }
-
-  Future<String?> _pickAndUploadImage(String folder) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
-    if (picked == null) return null;
-    final file = File(picked.path);
-    final ext = picked.path.split('.').last;
-    final path = '$folder/${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await supabase.storage.from(kStorageBucket).upload(path, file);
-    return supabase.storage.from(kStorageBucket).getPublicUrl(path);
   }
 
   @override
@@ -277,17 +263,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ...items.map((p) {
             final sup = p['suppliers'] as Map<String, dynamic>?;
             final verif = sup?['verification_level'] == 'commercial_verified' ? '✔ معتمد بسجل' : '🛡️ ضمان إلزامي';
-            final imgs = (p['images'] as List?) ?? [];
-            final imgUrl = imgs.isNotEmpty ? imgs.first.toString() : null;
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
               child: ListTile(
-                leading: imgUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(imgUrl, width: 58, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2)),
-                      )
-                    : const Icon(Icons.inventory_2, size: 40, color: Color(0xFF0F2342)),
+                leading: const Icon(Icons.inventory_2, size: 38, color: Color(0xFF0F2342)),
                 title: Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text('${_fmtPrice(p['base_price'], p['currency'])} • أقل طلب: ${p['moq']} ${p['unit_type'] ?? ''}\n${sup?['company_name'] ?? 'مورد'} (${sup?['governorate'] ?? ''}) • $verif'),
                 isThreeLine: true,
@@ -499,7 +478,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final amountCtrl = TextEditingController(text: (product['base_price'] ?? 0).toString());
     final refCtrl = TextEditingController();
     String network = 'الكريمي';
-    String? receiptUrl;
 
     showDialog(
       context: context,
@@ -519,15 +497,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 onChanged: (v) => network = v ?? 'الكريمي',
               ),
               TextField(controller: refCtrl, decoration: const InputDecoration(labelText: 'رقم الحوالة / المرجع')),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.upload_file),
-                label: const Text('رفع صورة سند التحويل'),
-                onPressed: () async {
-                  receiptUrl = await _pickAndUploadImage('escrow');
-                  if (receiptUrl != null) _toast('تم رفع سند التحويل');
-                },
-              ),
             ],
           ),
         ),
@@ -546,7 +515,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 'currency': product['currency'] ?? 'YER',
                 'payment_network': network,
                 'transfer_reference': refCtrl.text.trim(),
-                'receipt_image_url': receiptUrl,
                 'status': 'payment_verifying',
               });
               if (mounted) Navigator.pop(context);
@@ -650,7 +618,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
     int? catId = _categories.where((c) => c['parent_id'] != null).isNotEmpty
         ? _categories.where((c) => c['parent_id'] != null).first['id'] as int
         : (_categories.isNotEmpty ? _categories.first['id'] as int : null);
-    String? imgUrl;
 
     showDialog(
       context: context,
@@ -665,15 +632,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
               TextField(controller: moqCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'أقل كمية MOQ')),
               TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: 'الوحدة')),
               TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'الوصف')),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.image),
-                label: const Text('اختيار صورة المنتج'),
-                onPressed: () async {
-                  imgUrl = await _pickAndUploadImage('items');
-                  if (imgUrl != null) _toast('تم رفع صورة المنتج');
-                },
-              ),
             ],
           ),
         ),
@@ -689,7 +647,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 'moq': int.tryParse(moqCtrl.text) ?? 1,
                 'unit_type': unitCtrl.text.trim(),
                 'description': descCtrl.text.trim(),
-                'images': imgUrl != null ? [imgUrl] : [],
+                'images': [],
                 'moderation_status': 'pending',
               });
               if (mounted) Navigator.pop(context);
