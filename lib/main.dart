@@ -62,10 +62,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
   String _selectedGov = '';
   String _currency = 'YER';
 
-  List> _categories = [];
-  List> _products = [];
-  List> _rfqs = [];
-  List> _escrowDeals = [];
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _rfqs = [];
+  List<Map<String, dynamic>> _escrowDeals = [];
 
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _supplier;
@@ -93,9 +93,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
           .order('created_at', ascending: false);
 
       setState(() {
-        _categories = List>.from(catsRes);
-        _products = List>.from(prodsRes);
-        _rfqs = List>.from(rfqsRes);
+        _categories = List<Map<String, dynamic>>.from(catsRes);
+        _products = List<Map<String, dynamic>>.from(prodsRes);
+        _rfqs = List<Map<String, dynamic>>.from(rfqsRes);
       });
 
       final user = supabase.auth.currentUser;
@@ -106,7 +106,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         setState(() {
           _profile = prof;
           _supplier = sup;
-          _escrowDeals = List>.from(esc);
+          _escrowDeals = List<Map<String, dynamic>>.from(esc);
         });
       } else {
         setState(() {
@@ -200,7 +200,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  Widget _buildHomeTab(List> homeItems) {
+  Widget _buildHomeTab(List<Map<String, dynamic>> homeItems) {
     final govs = ['', 'صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب'];
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -550,281 +550,4 @@ class _MainShellScreenState extends State<MainShellScreen> {
             Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
-                title: Text(d['product_title'] ?? 'صفقة ضمان', style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('المبلغ: ${_fmtPrice(d['total_amount'], d['currency'])} • الحالة: ${d['status'] ?? ''}'),
-                trailing: (user != null && d['buyer_id'] == user.id && d['status'] == 'shipped')
-                    ? ElevatedButton(
-                        onPressed: () async {
-                          await supabase.from('escrow_deals').update({'status': 'delivered_released'}).eq('id', d['id']);
-                          _toast('تم تأكيد الاستلام وتحرير المبلغ');
-                          _loadAllData();
-                        },
-                        child: const Text('تأكيد الاستلام'),
-                      )
-                    : null,
-              ),
-            ),
-      ],
-    );
-  }
-
-  Widget _buildAccountTab() {
-    final user = supabase.auth.currentUser;
-    if (user == null) {
-      return _AuthView(onSuccess: _loadAllData, onToast: _toast);
-    }
-
-    final role = _profile?['role'] ?? 'buyer';
-    return ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.verified_user, color: Color(0xFF0F2342)),
-            title: Text(_profile?['full_name'] ?? user.email ?? 'حساب نشط', style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('الدور: $role • المحافظة: ${_profile?['governorate'] ?? 'اليمن'}'),
-            trailing: TextButton(
-              onPressed: () async {
-                await supabase.auth.signOut();
-                await _loadAllData();
-              },
-              child: const Text('خروج'),
-            ),
-          ),
-        ),
-        if (_supplier != null) ...[
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: const Color(0xFF09162B)),
-            icon: const Icon(Icons.add_box),
-            label: const Text('إضافة منتج جملة جديد'),
-            onPressed: _openAddProductDialog,
-          ),
-        ],
-        if (role == 'admin') ...[
-          const SizedBox(height: 12),
-          const Text('لوحة الإدارة والرقابة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F2342))),
-          const SizedBox(height: 6),
-          ElevatedButton(
-            onPressed: _openAdminPendingProductsDialog,
-            child: const Text('مراجعة واعتماد المنتجات المعلقة'),
-          ),
-        ],
-      ],
-    );
-  }
-
-  void _openAddProductDialog() {
-    final titleCtrl = TextEditingController();
-    final priceCtrl = TextEditingController();
-    final moqCtrl = TextEditingController(text: '10');
-    final unitCtrl = TextEditingController(text: 'كرتون');
-    final descCtrl = TextEditingController();
-    final subCats = _categories.where((c) => c['parent_id'] != null).toList();
-    final int? catId = subCats.isNotEmpty
-        ? subCats.first['id'] as int
-        : (_categories.isNotEmpty ? _categories.first['id'] as int : null);
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('إضافة منتج جملة'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المنتج')),
-              TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر')),
-              TextField(controller: moqCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'أقل كمية MOQ')),
-              TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: 'الوحدة')),
-              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'الوصف')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              await supabase.from('products').insert({
-                'supplier_id': _supplier!['id'],
-                'category_id': catId,
-                'title': titleCtrl.text.trim(),
-                'base_price': double.tryParse(priceCtrl.text) ?? 0,
-                'moq': int.tryParse(moqCtrl.text) ?? 1,
-                'unit_type': unitCtrl.text.trim(),
-                'description': descCtrl.text.trim(),
-                'images': [],
-                'moderation_status': 'pending',
-              });
-              if (mounted) Navigator.pop(context);
-              _toast('تم إرسال المنتج للمراجعة قبل النشر');
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openAdminPendingProductsDialog() async {
-    final pending = await supabase.from('products').select().eq('moderation_status', 'pending');
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('منتجات بانتظار الاعتماد'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: pending.length,
-            itemBuilder: (_, i) {
-              final p = pending[i];
-              return ListTile(
-                title: Text(p['title'] ?? ''),
-                subtitle: Text('السعر: ${p['base_price']}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                  onPressed: () async {
-                    await supabase.from('products').update({'moderation_status': 'approved'}).eq('id', p['id']);
-                    if (mounted) Navigator.pop(context);
-                    _toast('تم اعتماد ونشر المنتج');
-                    _loadAllData();
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthView extends StatefulWidget {
-  final VoidCallback onSuccess;
-  final void Function(String) onToast;
-  const _AuthView({required this.onSuccess, required this.onToast});
-
-  @override
-  State<_AuthView> createState() => _AuthViewState();
-}
-
-class _AuthViewState extends State<_AuthView> {
-  bool _isSignup = false;
-  String _role = 'buyer';
-  String _gov = 'صنعاء';
-  String _verifLevel = 'commercial_verified';
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  final _companyCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(14),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(_isSignup ? 'إنشاء حساب جديد' : 'تسجيل الدخول',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F2342))),
-                const SizedBox(height: 10),
-                if (_isSignup) ...[
-                  TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الكامل')),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _role,
-                    decoration: const InputDecoration(labelText: 'نوع الحساب'),
-                    items: const [
-                      DropdownMenuItem(value: 'buyer', child: Text('مشتري / صاحب محل')),
-                      DropdownMenuItem(value: 'supplier', child: Text('مورد / تاجر جملة')),
-                    ],
-                    onChanged: (v) => setState(() => _role = v ?? 'buyer'),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _gov,
-                    decoration: const InputDecoration(labelText: 'المحافظة'),
-                    items: ['صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب']
-                        .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _gov = v ?? 'صنعاء'),
-                  ),
-                  TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'رقم الجوال (سري للإدارة)')),
-                  if (_role == 'supplier') ...[
-                    TextField(controller: _companyCtrl, decoration: const InputDecoration(labelText: 'اسم الشركة أو المتجر')),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _verifLevel,
-                      decoration: const InputDecoration(labelText: 'مستوى التوثيق'),
-                      items: const [
-                        DropdownMenuItem(value: 'commercial_verified', child: Text('مورد معتمد بسجل تجاري')),
-                        DropdownMenuItem(value: 'independent_trader', child: Text('تاجر جملة / متجر نشط (ضمان إلزامي)')),
-                      ],
-                      onChanged: (v) => setState(() => _verifLevel = v ?? 'commercial_verified'),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                ],
-                TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'البريد الإلكتروني')),
-                const SizedBox(height: 8),
-                TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور')),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F2342), foregroundColor: Colors.white),
-                  onPressed: _submit,
-                  child: Text(_isSignup ? 'إنشاء الحساب' : 'دخول'),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _isSignup = !_isSignup),
-                  child: Text(_isSignup ? 'لدي حساب بالفعل؟ سجل دخولك' : 'ليس لديك حساب؟ أنشئ حساباً جديداً'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _submit() async {
-    try {
-      if (!_isSignup) {
-        await supabase.auth.signInWithPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text);
-        widget.onToast('تم تسجيل الدخول');
-      } else {
-        final res = await supabase.auth.signUp(email: _emailCtrl.text.trim(), password: _passCtrl.text);
-        final uid = res.user?.id;
-        if (uid != null) {
-          await supabase.from('profiles').upsert({
-            'id': uid,
-            'email': _emailCtrl.text.trim(),
-            'full_name': _nameCtrl.text.trim(),
-            'role': _role,
-            'governorate': _gov,
-            'private_phone': _phoneCtrl.text.trim(),
-          });
-          if (_role == 'supplier') {
-            await supabase.from('suppliers').insert({
-              'user_id': uid,
-              'company_name': _companyCtrl.text.trim().isEmpty ? _nameCtrl.text.trim() : _companyCtrl.text.trim(),
-              'governorate': _gov,
-              'verification_level': _verifLevel,
-              'approval_status': 'pending',
-            });
-          }
-        }
-        widget.onToast('تم إنشاء الحساب بنجاح');
-      }
-      widget.onSuccess();
-    } catch (e) {
-      widget.onToast('خطأ: $e');
-    }
-  }
-}
+                title: Text(d['product_title
