@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// ملاحظة: إذا أردت تفعيل اختيار الصور من الجهاز مستقبلاً:
+// 1) أضف image_picker في ملف pubspec.yaml
+// 2) أزل التعليق عن السطر التالي واستخدم الدوال الموضحة بالأسفل
+// import 'package:image_picker/image_picker.dart';
+
 const String kSupabaseUrl = 'https://buygdjesrvrvziarkghq.supabase.co';
 const String kSupabaseAnonKey = 'sb_publishable_2Ub-HpGdI9swNxaTZH50ag_4NM-Pphv';
 
@@ -201,6 +206,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   }
 
   Widget _buildHomeTab(List> items) {
+    final govs = ['', 'صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب'];
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -218,7 +224,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: ['', 'صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب'].map((g) {
+            children: govs.map((g) {
               return Padding(
                 padding: const EdgeInsets.only(left: 6),
                 child: ChoiceChip(
@@ -260,21 +266,23 @@ class _MainShellScreenState extends State<MainShellScreen> {
         if (items.isEmpty)
           const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد منتجات معتمدة مطابقة حالياً.'))))
         else
-          ...items.map((p) {
-            final sup = p['suppliers'] as Map<String, dynamic>?;
-            final verif = sup?['verification_level'] == 'commercial_verified' ? '✔ معتمد بسجل' : '🛡️ ضمان إلزامي';
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: const Icon(Icons.inventory_2, size: 38, color: Color(0xFF0F2342)),
-                title: Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text('${_fmtPrice(p['base_price'], p['currency'])} • أقل طلب: ${p['moq']} ${p['unit_type'] ?? ''}\n${sup?['company_name'] ?? 'مورد'} (${sup?['governorate'] ?? ''}) • $verif'),
-                isThreeLine: true,
-                onTap: () => _openProductSheet(p),
-              ),
-            );
-          }),
+          for (final p in items) _buildProductCard(p),
       ],
+    );
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> p) {
+    final sup = p['suppliers'] as Map<String, dynamic>?;
+    final verif = sup?['verification_level'] == 'commercial_verified' ? '✔ معتمد بسجل' : '🛡️ ضمان إلزامي';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: const Icon(Icons.inventory_2, size: 38, color: Color(0xFF0F2342)),
+        title: Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text('${_fmtPrice(p['base_price'], p['currency'])} • أقل طلب: ${p['moq']} ${p['unit_type'] ?? ''}\n${sup?['company_name'] ?? 'مورد'} (${sup?['governorate'] ?? ''}) • $verif'),
+        isThreeLine: true,
+        onTap: () => _openProductSheet(p),
+      ),
     );
   }
 
@@ -331,16 +339,19 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final mains = _categories.where((c) => c['parent_id'] == null).toList();
     return ListView(
       padding: const EdgeInsets.all(12),
-      children: mains.map((m) {
-        final subs = _categories.where((s) => s['parent_id'] == m['id']).toList();
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ExpansionTile(
-            title: Text(m['name_ar'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F2342))),
-            children: subs.map((s) => ListTile(title: Text(s['name_ar'] ?? ''))).toList(),
+      children: [
+        for (final m in mains)
+          Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ExpansionTile(
+              title: Text(m['name_ar'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F2342))),
+              children: [
+                for (final s in _categories.where((item) => item['parent_id'] == m['id']))
+                  ListTile(title: Text(s['name_ar'] ?? '')),
+              ],
+            ),
           ),
-        );
-      }).toList(),
+      ],
     );
   }
 
@@ -363,19 +374,20 @@ class _MainShellScreenState extends State<MainShellScreen> {
         if (_rfqs.isEmpty)
           const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد طلبات تسعير مفتوحة حالياً.'))))
         else
-          ..._rfqs.map((r) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  title: Text(r['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('الكمية: ${r['quantity']} ${r['unit_type'] ?? ''} • المحافظة: ${r['delivery_governorate'] ?? ''}'),
-                  trailing: _supplier != null
-                      ? TextButton(
-                          onPressed: () => _openRfqOfferDialog(r['id']),
-                          child: const Text('تقديم عرض'),
-                        )
-                      : null,
-                ),
-              )),
+          for (final r in _rfqs)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text(r['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('الكمية: ${r['quantity']} ${r['unit_type'] ?? ''} • المحافظة: ${r['delivery_governorate'] ?? ''}'),
+                trailing: _supplier != null
+                    ? TextButton(
+                        onPressed: () => _openRfqOfferDialog(r['id']),
+                        child: const Text('تقديم عرض'),
+                      )
+                    : null,
+              ),
+            ),
       ],
     );
   }
@@ -539,14 +551,13 @@ class _MainShellScreenState extends State<MainShellScreen> {
         if (_escrowDeals.isEmpty)
           const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد صفقات ضمان حالياً.'))))
         else
-          ..._escrowDeals.map((d) {
-            final st = d['status'] ?? '';
-            return Card(
+          for (final d in _escrowDeals)
+            Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text(d['product_title'] ?? 'صفقة ضمان', style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('المبلغ: ${_fmtPrice(d['total_amount'], d['currency'])} • الحالة: $st'),
-                trailing: (user != null && d['buyer_id'] == user.id && st == 'shipped')
+                subtitle: Text('المبلغ: ${_fmtPrice(d['total_amount'], d['currency'])} • الحالة: ${d['status'] ?? ''}'),
+                trailing: (user != null && d['buyer_id'] == user.id && d['status'] == 'shipped')
                     ? ElevatedButton(
                         onPressed: () async {
                           await supabase.from('escrow_deals').update({'status': 'delivered_released'}).eq('id', d['id']);
@@ -557,8 +568,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       )
                     : null,
               ),
-            );
-          }),
+            ),
       ],
     );
   }
@@ -609,14 +619,26 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
+  // إضافة جاهزة: مرجع سريع لرفع صور المنتجات إلى مجلد products في Supabase
+  // عند تفعيل image_picker لاحقاً في pubspec.yaml يمكن استدعاء هذه الدالة لحفظ الصور
+  /*
+  Future<String?> _uploadProductImage(XFile pickedFile) async {
+    final bytes = await pickedFile.readAsBytes();
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
+    await supabase.storage.from('products').uploadBinary(fileName, bytes);
+    return supabase.storage.from('products').getPublicUrl(fileName);
+  }
+  */
+
   void _openAddProductDialog() {
     final titleCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     final moqCtrl = TextEditingController(text: '10');
     final unitCtrl = TextEditingController(text: 'كرتون');
     final descCtrl = TextEditingController();
-    int? catId = _categories.where((c) => c['parent_id'] != null).isNotEmpty
-        ? _categories.where((c) => c['parent_id'] != null).first['id'] as int
+    final subCats = _categories.where((c) => c['parent_id'] != null).toList();
+    final int? catId = subCats.isNotEmpty
+        ? subCats.first['id'] as int
         : (_categories.isNotEmpty ? _categories.first['id'] as int : null);
 
     showDialog(
