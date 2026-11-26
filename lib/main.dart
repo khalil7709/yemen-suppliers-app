@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const String kSupabaseUrl = 'https://buygdjesrvrvziarkghq.supabase.co';
+const String kSupabaseUrl = 'https://yemen-supa-proxy.a715698920.workers.dev';
 const String kSupabaseAnonKey = 'sb_publishable_2Ub-HpGdI9swNxaTZH50ag_4NM-Pphv';
 
 Future<void> main() async {
