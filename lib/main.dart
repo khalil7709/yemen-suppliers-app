@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// ملاحظة: إذا أردت تفعيل اختيار الصور من الجهاز مستقبلاً:
-// 1) أضف image_picker في ملف pubspec.yaml
-// 2) أزل التعليق عن السطر التالي واستخدم الدوال الموضحة بالأسفل
-// import 'package:image_picker/image_picker.dart';
-
 const String kSupabaseUrl = 'https://buygdjesrvrvziarkghq.supabase.co';
 const String kSupabaseAnonKey = 'sb_publishable_2Ub-HpGdI9swNxaTZH50ag_4NM-Pphv';
 
@@ -205,7 +200,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  Widget _buildHomeTab(List> items) {
+  Widget _buildHomeTab(List> homeItems) {
     final govs = ['', 'صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب'];
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -261,12 +256,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Text('عروض الجملة المعتمدة (${items.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F2342))),
+        Text('عروض الجملة المعتمدة (${homeItems.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F2342))),
         const SizedBox(height: 8),
-        if (items.isEmpty)
+        if (homeItems.isEmpty)
           const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text('لا توجد منتجات معتمدة مطابقة حالياً.'))))
         else
-          for (final p in items) _buildProductCard(p),
+          for (final p in homeItems) _buildProductCard(p),
       ],
     );
   }
@@ -618,17 +613,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
       ],
     );
   }
-
-  // إضافة جاهزة: مرجع سريع لرفع صور المنتجات إلى مجلد products في Supabase
-  // عند تفعيل image_picker لاحقاً في pubspec.yaml يمكن استدعاء هذه الدالة لحفظ الصور
-  /*
-  Future<String?> _uploadProductImage(XFile pickedFile) async {
-    final bytes = await pickedFile.readAsBytes();
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
-    await supabase.storage.from('products').uploadBinary(fileName, bytes);
-    return supabase.storage.from('products').getPublicUrl(fileName);
-  }
-  */
 
   void _openAddProductDialog() {
     final titleCtrl = TextEditingController();
