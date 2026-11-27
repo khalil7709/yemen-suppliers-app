@@ -5,10 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const YemenSuppliersApp());
+  try {
+    await Firebase.initializeApp();
+    runApp(const YemenSuppliersApp());
+  } catch (e) {
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(child: Text('حدث خطأ: $e', style: TextStyle(color: Colors.red))),
+      ),
+    ));
+  }
 }
-
 final FirebaseAuth auth = FirebaseAuth.instance;
 final FirebaseFirestore db = FirebaseFirestore.instance;
 
