@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-const String kSupabaseUrl = 'https://proxy-to-supabase-cloud-x05p.onrender.com';
-const String kSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1eWdkamVzcnZydnppYXJrZ2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2MzYxODEsImV4cCI6MjExMTIxMjE4MX0.tmRTtpmnQWRzpltwGdc1ZyzKqejphG2IZi1-gIgQ1eY';
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: kSupabaseUrl, anonKey: kSupabaseAnonKey);
+  await Firebase.initializeApp();
   runApp(const YemenSuppliersApp());
 }
 
-final supabase = Supabase.instance.client;
+final FirebaseAuth auth = FirebaseAuth.instance;
+final FirebaseFirestore db = FirebaseFirestore.instance;
 
 class YemenSuppliersApp extends StatelessWidget {
   const YemenSuppliersApp({super.key});
@@ -46,12 +47,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
   String _searchQuery = '';
   String _selectedGov = '';
   String _currency = 'YER';
-  List _categories = [];
-  List _products = [];
-  List _rfqs = [];
-  List _escrowDeals = [];
-  Map _profile = {};
-  Map _supplier = {};
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _rfqs = [];
+  List<Map<String, dynamic>> _escrowDeals = [];
+  Map<String, dynamic> _profile = {};
+  Map<String, dynamic> _supplier = {};
   bool _hasSupplier = false;
   bool _loading = true;
 
@@ -64,24 +65,27 @@ class _MainShellScreenState extends State<MainShellScreen> {
   Future<void> _loadAllData() async {
     setState(() => _loading = true);
     try {
-      final catsRes = await supabase.from('categories').select().order('sort_order');
-      final prodsRes = await supabase.from('products').select('*, suppliers(company_name, governorate, verification_level, is_verified)').eq('moderation_status', 'approved').order('created_at', ascending: false);
-      final rfqsRes = await supabase.from('rfq_requests').select().eq('status', 'open').order('created_at', ascending: false);
+      final catsSnap = await db.collection('categories').get();
+      final prodsSnap = await db.collection('products').where('moderation_status', isEqualTo: 'approved').get();
+      final rfqsSnap = await db.collection('rfq_requests').where('status', isEqualTo: 'open').get();
+
       setState(() {
-        _categories = List.from(catsRes);
-        _products = List.from(prodsRes);
-        _rfqs = List.from(rfqsRes);
+        _categories = catsSnap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+        _products = prodsSnap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+        _rfqs = rfqsSnap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
       });
-      final user = supabase.auth.currentUser;
+
+      final user = auth.currentUser;
       if (user != null) {
-        final prof = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
-        final sup = await supabase.from('suppliers').select().eq('user_id', user.id).maybeSingle();
-        final esc = await supabase.from('escrow_deals').select().order('created_at', ascending: false);
+        final profDoc = await db.collection('profiles').doc(user.uid).get();
+        final supQuery = await db.collection('suppliers').where('user_id', isEqualTo: user.uid).get();
+        final escSnap = await db.collection('escrow_deals').where('buyer_id', isEqualTo: user.uid).get();
+
         setState(() {
-          _profile = prof ?? {};
-          _supplier = sup ?? {};
-          _hasSupplier = sup != null;
-          _escrowDeals = List.from(esc);
+          _profile = profDoc.exists ? profDoc.data()! : {};
+          _supplier = supQuery.docs.isNotEmpty ? {'id': supQuery.docs.first.id, ...supQuery.docs.first.data()} : {};
+          _hasSupplier = supQuery.docs.isNotEmpty;
+          _escrowDeals = escSnap.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
         });
       } else {
         setState(() {
@@ -112,8 +116,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredProducts = _products.where((p) {
-      final sup = p['suppliers'];
-      final govOk = _selectedGov.isEmpty || (sup != null ? (sup['governorate'] ?? '') : '') == _selectedGov;
+      final govOk = _selectedGov.isEmpty || (p['governorate'] ?? '') == _selectedGov;
       final q = _searchQuery.toLowerCase();
       final title = (p['title'] ?? '').toString().toLowerCase();
       final desc = (p['description'] ?? '').toString().toLowerCase();
@@ -174,7 +177,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  Widget _buildHomeTab(List homeItems) {
+  Widget _buildHomeTab(List<Map<String, dynamic>> homeItems) {
     final govs = ['', 'صنعاء', 'عدن', 'الحديدة', 'تعز', 'إب', 'حضرموت', 'مأرب'];
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -240,23 +243,21 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  Widget _buildProductCard(dynamic p) {
-    final sup = p['suppliers'];
-    final verif = sup != null && sup['verification_level'] == 'commercial_verified' ? 'معتمد بسجل' : 'ضمان الزامي';
+  Widget _buildProductCard(Map<String, dynamic> p) {
+    final verif = p['verification_level'] == 'commercial_verified' ? 'معتمد بسجل' : 'ضمان الزامي';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: const Icon(Icons.inventory_2, size: 38, color: Color(0xFF0F2342)),
         title: Text(p['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text('${_fmtPrice(p['base_price'], p['currency'])} - اقل طلب: ${p['moq']} ${p['unit_type'] ?? ''}\n${sup != null ? sup['company_name'] ?? 'مورد' : 'مورد'} (${sup != null ? sup['governorate'] ?? '' : ''}) - $verif'),
+        subtitle: Text('${_fmtPrice(p['base_price'], p['currency'])} - اقل طلب: ${p['moq']} ${p['unit_type'] ?? ''}\n${p['company_name'] ?? 'مورد'} (${p['governorate'] ?? ''}) - $verif'),
         isThreeLine: true,
         onTap: () => _openProductSheet(p),
       ),
     );
   }
 
-  void _openProductSheet(dynamic p) {
-    final sup = p['suppliers'];
+  void _openProductSheet(Map<String, dynamic> p) {
     showModalBottomSheet(
       context: context,
       builder: (_) => Padding(
@@ -268,7 +269,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             Text(p['title'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F2342))),
             const SizedBox(height: 6),
             Text('السعر: ${_fmtPrice(p['base_price'], p['currency'])} / ${p['unit_type'] ?? ''} - اقل كمية: ${p['moq']}'),
-            Text('المورد: ${sup != null ? sup['company_name'] ?? '' : ''} (${sup != null ? sup['governorate'] ?? '' : ''})'),
+            Text('المورد: ${p['company_name'] ?? ''} (${p['governorate'] ?? ''})'),
             if ((p['description'] ?? '').toString().isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(p['description']),
@@ -286,15 +287,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       _openCreateEscrowDialog(p);
                     },
                   ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await supabase.from('products').update({'reports_count': (p['reports_count'] ?? 0) + 1}).eq('id', p['id']);
-                    _toast('تم ارسال البلاغ للمراجعة');
-                  },
-                  child: const Text('تبليغ'),
                 ),
               ],
             ),
@@ -362,7 +354,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   }
 
   void _openCreateRfqDialog() {
-    final user = supabase.auth.currentUser;
+    final user = auth.currentUser;
     if (user == null) {
       setState(() => _currentIndex = 4);
       _toast('سجل الدخول اولا لنشر طلب تسعير');
@@ -393,12 +385,14 @@ class _MainShellScreenState extends State<MainShellScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('الغاء')),
           ElevatedButton(
             onPressed: () async {
-              await supabase.from('rfq_requests').insert({
-                'buyer_id': user.id,
+              await db.collection('rfq_requests').add({
+                'buyer_id': user.uid,
                 'title': titleCtrl.text.trim(),
                 'quantity': int.tryParse(qtyCtrl.text) ?? 1,
                 'unit_type': unitCtrl.text.trim(),
                 'delivery_governorate': gov,
+                'status': 'open',
+                'created_at': FieldValue.serverTimestamp(),
               });
               if (mounted) Navigator.pop(context);
               _toast('تم نشر طلب التسعير');
@@ -411,7 +405,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  void _openRfqOfferDialog(dynamic rfqId) {
+  void _openRfqOfferDialog(String rfqId) {
     final priceCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     showDialog(
@@ -429,11 +423,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('الغاء')),
           ElevatedButton(
             onPressed: () async {
-              await supabase.from('rfq_offers').insert({
+              await db.collection('rfq_offers').add({
                 'rfq_id': rfqId,
                 'supplier_id': _supplier['id'],
                 'unit_price': double.tryParse(priceCtrl.text) ?? 0,
                 'notes': notesCtrl.text.trim(),
+                'created_at': FieldValue.serverTimestamp(),
               });
               if (mounted) Navigator.pop(context);
               _toast('تم ارسال عرض السعر');
@@ -445,8 +440,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  void _openCreateEscrowDialog(dynamic product) {
-    final user = supabase.auth.currentUser;
+  void _openCreateEscrowDialog(Map<String, dynamic> product) {
+    final user = auth.currentUser;
     if (user == null) {
       setState(() => _currentIndex = 4);
       _toast('سجل الدخول اولا لفتح صفقة ضمان');
@@ -480,8 +475,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ElevatedButton(
             onPressed: () async {
               final amt = double.tryParse(amountCtrl.text) ?? 0;
-              await supabase.from('escrow_deals').insert({
-                'buyer_id': user.id,
+              await db.collection('escrow_deals').add({
+                'buyer_id': user.uid,
                 'supplier_id': product['supplier_id'],
                 'product_title': product['title'],
                 'quantity': int.tryParse(qtyCtrl.text) ?? 1,
@@ -491,6 +486,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 'payment_network': network,
                 'transfer_reference': refCtrl.text.trim(),
                 'status': 'payment_verifying',
+                'created_at': FieldValue.serverTimestamp(),
               });
               if (mounted) Navigator.pop(context);
               _toast('تم ارسال حوالة الضمان للتحقق');
@@ -505,7 +501,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   }
 
   Widget _buildEscrowTab() {
-    final user = supabase.auth.currentUser;
+    final user = auth.currentUser;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -520,10 +516,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
               child: ListTile(
                 title: Text(d['product_title'] ?? 'صفقة ضمان', style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text('المبلغ: ${_fmtPrice(d['total_amount'], d['currency'])} - الحالة: ${d['status'] ?? ''}'),
-                trailing: (user != null && d['buyer_id'] == user.id && d['status'] == 'shipped')
+                trailing: (user != null && d['buyer_id'] == user.uid && d['status'] == 'shipped')
                     ? ElevatedButton(
                         onPressed: () async {
-                          await supabase.from('escrow_deals').update({'status': 'delivered_released'}).eq('id', d['id']);
+                          await db.collection('escrow_deals').doc(d['id']).update({'status': 'delivered_released'});
                           _toast('تم تاكيد الاستلام وتحرير المبلغ');
                           _loadAllData();
                         },
@@ -537,7 +533,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   }
 
   Widget _buildAccountTab() {
-    final user = supabase.auth.currentUser;
+    final user = auth.currentUser;
     if (user == null) {
       return _AuthView(onSuccess: _loadAllData, onToast: _toast);
     }
@@ -552,7 +548,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             subtitle: Text('الدور: $role - المحافظة: ${_profile['governorate'] ?? 'اليمن'}'),
             trailing: TextButton(
               onPressed: () async {
-                await supabase.auth.signOut();
+                await auth.signOut();
                 await _loadAllData();
               },
               child: const Text('خروج'),
@@ -568,15 +564,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
             onPressed: _openAddProductDialog,
           ),
         ],
-        if (role == 'admin') ...[
-          const SizedBox(height: 12),
-          const Text('لوحة الادارة والرقابة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F2342))),
-          const SizedBox(height: 6),
-          ElevatedButton(
-            onPressed: _openAdminPendingProductsDialog,
-            child: const Text('مراجعة واعتماد المنتجات المعلقة'),
-          ),
-        ],
       ],
     );
   }
@@ -587,8 +574,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final moqCtrl = TextEditingController(text: '10');
     final unitCtrl = TextEditingController(text: 'كرتون');
     final descCtrl = TextEditingController();
-    final subCats = _categories.where((c) => c['parent_id'] != null).toList();
-    final catId = subCats.isNotEmpty ? subCats.first['id'] : (_categories.isNotEmpty ? _categories.first['id'] : null);
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -609,16 +594,18 @@ class _MainShellScreenState extends State<MainShellScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('الغاء')),
           ElevatedButton(
             onPressed: () async {
-              await supabase.from('products').insert({
+              await db.collection('products').add({
                 'supplier_id': _supplier['id'],
-                'category_id': catId,
                 'title': titleCtrl.text.trim(),
                 'base_price': double.tryParse(priceCtrl.text) ?? 0,
                 'moq': int.tryParse(moqCtrl.text) ?? 1,
                 'unit_type': unitCtrl.text.trim(),
                 'description': descCtrl.text.trim(),
-                'images': [],
                 'moderation_status': 'pending',
+                'company_name': _supplier['company_name'] ?? '',
+                'governorate': _supplier['governorate'] ?? '',
+                'verification_level': _supplier['verification_level'] ?? '',
+                'created_at': FieldValue.serverTimestamp(),
               });
               if (mounted) Navigator.pop(context);
               _toast('تم ارسال المنتج للمراجعة قبل النشر');
@@ -626,40 +613,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
             child: const Text('حفظ'),
           ),
         ],
-      ),
-    );
-  }
-
-  Future<void> _openAdminPendingProductsDialog() async {
-    final pending = await supabase.from('products').select().eq('moderation_status', 'pending');
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('منتجات بانتظار الاعتماد'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: pending.length,
-            itemBuilder: (_, i) {
-              final p = pending[i];
-              return ListTile(
-                title: Text(p['title'] ?? ''),
-                subtitle: Text('السعر: ${p['base_price']}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                  onPressed: () async {
-                    await supabase.from('products').update({'moderation_status': 'approved'}).eq('id', p['id']);
-                    if (mounted) Navigator.pop(context);
-                    _toast('تم اعتماد ونشر المنتج');
-                    _loadAllData();
-                  },
-                ),
-              );
-            },
-          ),
-        ),
       ),
     );
   }
@@ -756,14 +709,13 @@ class _AuthViewState extends State<_AuthView> {
   Future<void> _submit() async {
     try {
       if (!_isSignup) {
-        await supabase.auth.signInWithPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text);
+        await auth.signInWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text);
         widget.onToast('تم تسجيل الدخول');
       } else {
-        final res = await supabase.auth.signUp(email: _emailCtrl.text.trim(), password: _passCtrl.text);
-        final uid = res.user?.id;
+        final cred = await auth.createUserWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text);
+        final uid = cred.user?.uid;
         if (uid != null) {
-          await supabase.from('profiles').upsert({
-            'id': uid,
+          await db.collection('profiles').doc(uid).set({
             'email': _emailCtrl.text.trim(),
             'full_name': _nameCtrl.text.trim(),
             'role': _role,
@@ -771,7 +723,7 @@ class _AuthViewState extends State<_AuthView> {
             'private_phone': _phoneCtrl.text.trim(),
           });
           if (_role == 'supplier') {
-            await supabase.from('suppliers').insert({
+            await db.collection('suppliers').add({
               'user_id': uid,
               'company_name': _companyCtrl.text.trim().isEmpty ? _nameCtrl.text.trim() : _companyCtrl.text.trim(),
               'governorate': _gov,
