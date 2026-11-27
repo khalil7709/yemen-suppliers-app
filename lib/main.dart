@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const String kSupabaseUrl = 'https://proxy-to-supabase-cloud-x05p.onrender.com';
-const String kSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1eWdkamVzcnZydnppYXJrZ2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2MzYxODEsImV4cCI6MjExMTIxMjE4MX0.tmRTtpmnQWRzpltwGdc1ZyzKqejphG2IZi1-gIgQ1eY;
+const String kSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1eWdkamVzcnZydnppYXJrZ2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2MzYxODEsImV4cCI6MjExMTIxMjE4MX0.tmRTtpmnQWRzpltwGdc1ZyzKqejphG2IZi1-gIgQ1eY';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: kSupabaseUrl, anonKey: kSupabaseAnonKey);
