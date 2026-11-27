@@ -1,5 +1,5 @@
 name: yemen_suppliers_app
-description: A supplier marketplace application for the Yemeni market.
+description: A supplier marketplace application.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,7 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  supabase_flutter: ^2.6.0
+  firebase_core: ^3.6.0
+  cloud_firestore: ^5.4.4
+  firebase_auth: ^5.3.1
 
 dev_dependencies:
   flutter_test:
