@@ -1,0 +1,29 @@
+{
+  "معلومات_المشروع": {
+    "رقم_المشروع": "955297202371"
+    "project_id": "khalil-baba",
+    "storage_bucket": "khalil-baba.firebasestorage.app"
+  },
+  "عميل": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955297202371:android:327c3c6fccd4c7d2c62276",
+        "android_client_info": {
+          "package_name": "com.khalil.yemensuppliers"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFjXIlGLbbhKsXe1JjKEXR-kK5jkUMCZs"
+        }
+      ],
+      "خدمات": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
