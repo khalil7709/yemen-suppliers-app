@@ -31,6 +31,12 @@ jobs:
       - name: Copy Firebase Config
         run: cp google-services.json android/app/
 
+      - name: Patch app build.gradle
+        run: |
+          echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+          echo "apply plugin: 'com.google.gms.google-services'" >> android/build.gradle
+          sed -i "s/classpath 'com.android.tools.build:gradle:.*'/classpath 'com.android.tools.build:gradle:8.1.0'\n        classpath 'com.google.gms:google-services:4.4.0'/" android/build.gradle
+
       - name: Get dependencies
         run: flutter pub get
 
