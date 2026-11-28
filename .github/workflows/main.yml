@@ -29,9 +29,7 @@ jobs:
         run: flutter create --platforms=android --project-name=yemen_suppliers_app .
 
       - name: Copy Firebase Config
-        run: |
-          cp google-services.json android/app/ || echo "File not found in root"
-          cp android/app/google-services.json android/app/ || echo "File already in place"
+        run: cp google-services.json android/app/
 
       - name: Get dependencies
         run: flutter pub get
